@@ -1,0 +1,125 @@
+import tifffile as tiff
+from matplotlib import pyplot as plt
+import numpy as np
+from scipy import ndimage
+img=tiff.imread('/Users/sdl/Desktop/GNR_project/data.tif')
+print(img.shape)
+import cv2
+import math
+
+
+
+def features(glcm):
+    sum1 = 0
+    energy = 0
+    homo = 0
+    asm = 0
+    ent = 0
+
+ #glcm = np.array([[1,2],[4,5]])
+    for i in range(0, glcm.shape[0]):
+         for j in range(0, glcm.shape[1]):
+            sum1 = sum1 + ((i-j)*(i-j)*glcm[i,j])
+            energy = energy + glcm[i,j]*glcm[i,j]
+            homo = homo + (glcm[i,j]/(1+abs(i-j)))
+            asm = asm + glcm[i,j]*glcm[i,j]
+            ent = ent + glcm[i,j]*(math.log(1/glcm[i,j]))
+        
+    features_glcm = [sum1, energy, homo, asm, ent]
+
+    return features_glcm
+
+
+def compute_glcm(img, window_size):
+    # Compute the GLCM properties for a single window
+    glcm = np.zeros((256,256))
+    for i in range(img.shape[0] - 1):
+        for j in range(img.shape[1] - 1):
+            p = img[i, j]
+            q = img[i+1, j+1]
+            glcm[p,q] += 1
+            glcm[q,p] += 1
+    glcm = glcm / np.sum(glcm)
+    return features(glcm)
+
+
+
+    # Calculate the GLCM properties
+    #contrast = np.sum((np.arange(256)[:,np.newaxis,np.newaxis] - np.arange(256)[np.newaxis,:,np.newaxis])**2 * glcm)
+    #homogeneity = np.sum(glcm / (1 + (np.arange(256)[:,np.newaxis,np.newaxis] - np.arange(256)[np.newaxis,:,np.newaxis])**2))
+    #energy = np.sum(glcm**2)
+    #x,y = np.meshgrid(np.arange(256), np.arange(256))
+    #correlation = np.sum(((x - np.mean(glcm)) * (y - np.mean(glcm))) * glcm) / (np.std(glcm) ** 2)
+    
+    return np.array([contrast, homogeneity, energy])
+
+def compute_glcm_features(img, pca_idx, window_sizes):
+    # Compute the GLCM features for PCA1
+    img_pca = img
+    features = []
+    for w in window_sizes:
+        window_half = w // 2
+        for i in range(window_half, img_pca.shape[0] - window_half):
+            for j in range(window_half, img_pca.shape[1] - window_half):
+                img_window = img_pca[i-window_half:i+window_half+1, j-window_half:j+window_half+1]
+                feature = compute_glcm(img_window, w)
+                features.append(feature)
+                print(i,j,feature)
+    features = np.stack(features, axis=1)
+    return features
+
+def normalize_array(arr):
+    min_val = np.min(arr)
+    max_val = np.max(arr)
+    
+
+    arr_norm = (arr - min_val) / (max_val - min_val)
+    
+    arr_scaled = (arr_norm * 255).astype(np.uint8)
+    
+    return arr_scaled
+
+
+
+
+
+
+
+
+
+
+
+
+img = img.reshape((img.shape[0]*img.shape[1], img.shape[2]))
+#print(img.shape)
+
+mean = np.mean(img, axis=0)
+img_centered = img - mean
+
+covariance_matrix = np.cov(img_centered.T)
+
+#print(covariance_matrix.shape)
+
+eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)
+
+sorted_indices = np.argsort(eigenvalues)[::-1]
+sorted_eigenvectors = eigenvectors[:, sorted_indices]
+
+#print(sorted_indices)
+#print(sorted_eigenvectors)
+
+
+principal_components = np.dot(img_centered, sorted_eigenvectors)
+#print(principal_components.shape)
+
+pca1 = principal_components[:, 0]
+pca1 = normalize_array(pca1.reshape((863, 876)))
+
+
+pca2 = principal_components[:, 1]
+pca2 = pca2.reshape((863, 876))
+
+
+matrix=compute_glcm_features(pca1, 0, [3])
+
+print(matrix.shape)
